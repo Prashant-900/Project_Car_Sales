@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Car Sales Assistant</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .connecting {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .recording {
+            background-color: #dc3545 !important;
+            color: white;
+        }
+        
+        #messages, #transcript {
+            margin-top: 10px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+            border-radius: 4px;
+            background-color: white;
+        }
+        
+        #messages div, #transcript div {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        button:hover:not(:disabled) {
+            background-color: #0056b3;
+            transform: translateY(-1px);
+        }
+        
+        .csv-upload {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            text-align: center;
+        }
+        
+        .csv-upload h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        .csv-upload input[type="file"] {
+            margin: 15px 0;
+            padding: 10px;
+            width: 100%;
+            max-width: 300px;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin: 15px 0;
+        }
+        
+        .error {
+            color: #dc3545;
+            margin: 5px 0;
+            font-size: 0.9em;
+        }
+        
+        .success {
+            color: #28a745;
+            margin: 5px 0;
+            font-size: 0.9em;
+        }
+        
+        h1, h3 {
+            color: #333;
+        }
+        
+        #csvStatus {
+            margin-top: 10px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Car Sales Assistant</h1>
+        
+        <div class="section">
+            <div id="status" class="status">Not Connected</div>
+            
+            <div class="controls">
+                <button id="startBtn" onclick="startRecording()" disabled>
+                    <i class="fas fa-microphone"></i> Start Recording
+                </button>
+                <button id="stopBtn" onclick="stopRecording()" disabled>
+                    <i class="fas fa-stop"></i> Stop Recording
+                </button>
+                <button onclick="reconnect()">
+                    <i class="fas fa-sync"></i> Reconnect
+                </button>
+            </div>
+        </div>
+        
+        <div class="section csv-upload">
+            <h3>Bulk Call CSV Upload</h3>
+            <p>Upload a CSV file with columns: name, phone</p>
+            <input type="file" id="csvFile" accept=".csv" />
+            <button onclick="uploadCSV()">
+                <i class="fas fa-upload"></i> Upload and Start Calls
+            </button>
+            <div id="csvStatus"></div>
+        </div>
+        
+        <div class="section">
+            <h3>Your Speech:</h3>
+            <div id="transcript"></div>
+        </div>
+        
+        <div class="section">
+            <h3>Assistant Response:</h3>
+            <div id="messages"></div>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let recognition;
+        let isRecording = false;
+        let audioQueue = [];  // Queue to store audio data chunks
+        let isPlayingAudio = false;
+        
+        const status = document.getElementById('status');
+        const messages = document.getElementById('messages');
+        const transcript = document.getElementById('transcript');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const csvStatus = document.getElementById('csvStatus');
+        
+        const audioPlayer = document.getElementById('audioPlayer');
+
+        function initSpeechRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                console.error('Speech recognition not supported');
+                status.textContent = 'Speech recognition not supported in this browser';
+                return false;
+            }
+            
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            
+            recognition.onresult = function(event) {
+                let interimTranscript = '';
+                let finalTranscript = '';
+                
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const result = event.results[i];
+                    if (result.isFinal) {
+                        finalTranscript += result[0].transcript;
+                        if (socket && socket.readyState === WebSocket.OPEN) {
+                            const message = {
+                                content: finalTranscript
+                            };
+                            socket.send(JSON.stringify(message));
+                            console.log('Sent:', message);
+                        }
+                    } else {
+                        interimTranscript += result[0].transcript;
+                    }
+                }
+                
+                transcript.innerHTML = `<div>${finalTranscript || interimTranscript}</div>`;
+            };
+
+            recognition.onend = function() {
+                if (isRecording) {
+                    console.log('Speech recognition restarted');
+                    recognition.start();
+                }
+            };
+
+            recognition.onerror = function(event) {
+                console.error('Speech recognition error:', event.error);
+                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    status.textContent = 'Speech recognition not allowed';
+                } else if (event.error === 'no-speech' || event.error === 'aborted') {
+                    console.log('No speech detected, restarting recognition...');
+                    if (isRecording) recognition.start();
+                } else {
+                    stopRecording();
+                }
+            };
+
+            return true;
+        }
+
+        function connect() {
+            status.textContent = 'Connecting...';
+            status.className = 'status connecting';
+            
+            socket = new WebSocket('ws://127.0.0.1:5000');
+            
+            socket.onopen = function() {
+                console.log('WebSocket connected');
+                status.textContent = 'Connected!';
+                status.className = 'status connected';
+                startBtn.disabled = false;
+            };
+            
+            socket.onclose = function(event) {
+                console.log('WebSocket closed:', event);
+                status.textContent = 'Disconnected';
+                status.className = 'status disconnected';
+                startBtn.disabled = true;
+                stopRecording();
+            };
+            
+            socket.onmessage = function(event) {
+                if (event.data instanceof Blob) {
+                    console.log("Received audio data:", event.data); // Debug log
+                    const audioBlob = event.data;
+                    const audioUrl = URL.createObjectURL(audioBlob);
+
+                    // Push the new audio to the queue
+                    audioQueue.push(audioUrl);
+
+                    // If no audio is currently playing, start playing the queued audio
+                    if (!isPlayingAudio) {
+                        playNextAudio();
+                    }
+                } else
+                {console.log('Message received:', event.data);
+                const msg = document.createElement('div');
+                msg.textContent = `${new Date().toTimeString().split(' ')[0]}: ${event.data}`;
+                messages.appendChild(msg);
+                messages.scrollTop = messages.scrollHeight;}
+            };
+            
+            socket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                status.textContent = 'Error occurred';
+                status.className = 'status disconnected';
+                startBtn.disabled = true;
+            };
+        }
+
+        function playNextAudio() {
+            if (audioQueue.length > 0 && !isPlayingAudio) {
+                isPlayingAudio = true;
+
+                // Get the next audio URL from the queue
+                const audioUrl = audioQueue.shift();  // Remove the first audio chunk from the queue
+                const audioPlayer = new Audio(audioUrl);
+
+                audioPlayer.onended = function() {
+                    // When the current audio finishes, play the next one
+                    isPlayingAudio = false;
+                    playNextAudio();
+                };
+
+                audioPlayer.onerror = function() {
+                    console.error("Error occurred while playing audio.");
+                    isPlayingAudio = false;
+                    playNextAudio(); // Continue with the next audio if error occurs
+                };
+
+                audioPlayer.play();  // Start playing the current audio
+            }
+        }
+
+        function startRecording() {
+            if (!isRecording && recognition) {
+                recognition.start();
+                isRecording = true;
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                startBtn.classList.add('recording');
+                messages.textContent = '';
+                console.log('Recording started');
+            }
+        }
+
+        function stopRecording() {
+            if (isRecording && recognition) {
+                recognition.stop();
+                isRecording = false;
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                startBtn.classList.remove('recording');
+                console.log('Recording stopped');
+            }
+        }
+
+        function reconnect() {
+            if (socket) {
+                socket.close();
+            }
+            if (isRecording) {
+                stopRecording();
+            }
+            connect();
+        }
+
+        function uploadCSV() {
+            const fileInput = document.getElementById('csvFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                csvStatus.textContent = 'Please select a CSV file';
+                csvStatus.className = 'error';
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const csvContent = e.target.result;
+                
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    const message = {
+                        csv_content: csvContent
+                    };
+                    socket.send(JSON.stringify(message));
+                    csvStatus.textContent = 'CSV file uploaded, processing calls...';
+                    csvStatus.className = 'success';
+                    console.log('CSV sent to server');
+                } else {
+                    csvStatus.textContent = 'WebSocket connection not available';
+                    csvStatus.className = 'error';
+                }
+            };
+            
+            reader.onerror = function() {
+                csvStatus.textContent = 'Error reading CSV file';
+                csvStatus.className = 'error';
+            };
+            
+            reader.readAsText(file);
+        }
+
+        // Initialize on page load
+        if (initSpeechRecognition()) {
+            connect();
+            console.log('Speech recognition initialized');
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (socket) {
+                socket.close();
+            }
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+
+        console.log('Script loaded');
+    </script>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</body>
+</html>
