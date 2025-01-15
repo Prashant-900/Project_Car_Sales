@@ -38,7 +38,7 @@ logging.basicConfig(
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
-NGROK_URL = os.getenv("NGROK_URL")
+NGROK_URL = "https://project-car-sales-2.onrender.com"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Initialize Twilio client
