@@ -35,11 +35,11 @@ logging.basicConfig(
 )
 
 # Configuration
-TWILIO_ACCOUNT_SID = "AC59521c7e79105029cd69d380cad8602a"
-TWILIO_AUTH_TOKEN = "e3b1719cead7fb890889a053912325a7"
-TWILIO_PHONE_NUMBER = "+18786669252"
-NGROK_URL = "https://1f1d-14-99-167-142.ngrok-free.app" 
-SMALLEST_API_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2NzgwMmRkNjQzNjMwNGZhZDUwNjVkOTAiLCJrZXlOYW1lIjoiY29udmVydC1haS1yZXNwb25zZS10by1zcGVlY2giLCJpYXQiOjE3MzY4Njk5MTB9.FSOHIn58oA8K-FrpBz2h-NhCtWlp7CQ9bPTMDRuxpYA"
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
+NGROK_URL = os.getenv("NGROK_URL")
+SMALLEST_API_KEY=os.getenv("SMALLEST_API_KEY")
 
 
 # Initialize Twilio client
@@ -62,7 +62,7 @@ GREETING = (
 )
 
 # Configure Gemini API
-genai.configure(api_key="AIzaSyAihY7kB3c2vfMgJ5B9b_wnf3B-M2aBJIY")
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 model = GenerativeModel("gemini-2.0-flash-exp")
 
 class ConversationManager:
