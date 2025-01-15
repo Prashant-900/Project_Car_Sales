@@ -20,9 +20,10 @@ from collections import defaultdict
 import weakref
 import aiofiles
 from gtts import gTTS
-from smallest import Smallest
 import time
 from io import StringIO
+from gtts import gTTS
+from io import BytesIO, StringIO
 
 # Load environment variables
 load_dotenv()
@@ -38,7 +39,6 @@ TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")
 NGROK_URL = os.getenv("NGROK_URL")
-SMALLEST_API_KEY = os.getenv("SMALLEST_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Initialize Twilio client
@@ -125,21 +125,17 @@ class ClientManager:
 client_manager = ClientManager()
 
 def text_to_speech(text: str) -> bytes:
-    """Convert text to speech using the smallest.ai API with retry logic."""
-    retries = 3
-    for attempt in range(retries):
-        try:
-            client = Smallest(api_key=SMALLEST_API_KEY)
-            response = client.synthesize(text)
-            return response
-        except Exception as e:
-            logging.error(f"Error converting text to speech: {str(e)}")
-            if "rate limit" in str(e).lower() and attempt < retries - 1:
-                logging.info(f"Rate limit exceeded. Retrying in 10 seconds... (Attempt {attempt + 1}/{retries})")
-                time.sleep(10)
-            else:
-                break
-    return None
+    """Convert text to speech using Google Text-to-Speech"""
+    try:
+        tts = gTTS(text=text, lang='en', slow=False)
+        # Save to bytes buffer instead of file
+        audio_buffer = BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        return audio_buffer.read()
+    except Exception as e:
+        logging.error(f"Error converting text to speech: {str(e)}")
+        return None
 
 async def generate(
     messages: List[Dict[str, str]],
