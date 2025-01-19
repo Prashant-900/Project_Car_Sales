@@ -4,4 +4,4 @@ twilio
 aiohttp
 aiofiles
 gtts
-smallest
+smallestai
