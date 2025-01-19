@@ -6,4 +6,5 @@ aiofiles
 gtts
 smallestai
 uvicorn
+server
 
